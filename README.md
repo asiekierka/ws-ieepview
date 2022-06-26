@@ -17,3 +17,7 @@ bytes at address 0x30 and above.
   * X4/X2: change QR codes
   * X1: switch zoom mode (higher zoom = more QR codes)
   * B: exit
+
+## SRAM export format
+
+The viewer uses an 8KB savefile format, split into four 2KB slots - one for each EEPROM dump.
