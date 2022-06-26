@@ -17,13 +17,24 @@ const uint8_t __far hex2chr[16] = {
 const uint8_t __far hex2chr_lower[16] = {
 '0','1','2','3','4','5','6','7','8','9','a','b','c','d','e','f'
 };
+const uint8_t __far progress_anim[4] = {
+'q', 'd', 'b', 'p'
+};
 
 int16_t ieep_pos = 0;
 uint16_t key_last;
 uint16_t ieep_max_size;
 
-volatile uint16_t vblank_ticks;
-void vblank_int_handler(void);
+volatile bool vblank_show_progress_anim;
+volatile uint8_t vblank_ticks;
+
+void __attribute__((interrupt)) vblank_int_handler(void) {
+	vblank_ticks++;
+	if (vblank_show_progress_anim) {
+		screen[(17 << 5) | 27] = progress_anim[(vblank_ticks >> 2) & 3] | 0x400;
+	}
+	outportb(IO_INT_ACK, INTR_MASK_VBLANK);
+}
 
 void wait_for_vbl(void) {
 	uint16_t last_vblank_ticks = vblank_ticks;
@@ -42,7 +53,7 @@ void draw_ieep_ui_static(void) {
 	screen[(16 << 5) | 3] = 0xCF;
 	memset(screen + (32 * 17), 0, 28 * 2);
 	if (system_color_active()) {
-		screen[(17 << 5) | 27] = 'C';
+		screen[(17 << 5) | 27] = 'C' | 0x400;
 	}
 	screen[(17 << 5) | 0] = 'i';
 	screen[(17 << 5) | 1] = 'e';
@@ -54,7 +65,7 @@ void draw_ieep_ui_static(void) {
 	screen[(17 << 5) | 7] = 'w';
 	screen[(17 << 5) | 9] = '0';
 	screen[(17 << 5) | 10] = '.';
-	screen[(17 << 5) | 11] = '2';
+	screen[(17 << 5) | 11] = '3';
 }
 
 void draw_ieep_data(void) {
@@ -114,18 +125,22 @@ static uint16_t keypad_r_scan() {
 	return keyr;
 }
 
-void init_font_data(void) {
+void init_font_data(uint16_t len) {
 	const uint8_t __far *font_data = asset_map(ASSET_8X8_CHR);
-	for (uint16_t i = 0; i < 2048; i++) {
+	for (uint16_t i = 0; i < len; i++) {
 		((uint16_t*) 0x2000)[i] = font_data[i] * 0x101;
 	}
+}
+
+static void draw_ui_clear_screen(void) {
+	memset(screen, 0, 28 * 2 + 32 * 17 * 2);
 }
 
 void draw_ieep_ui(void) {
 	wait_for_vbl();
 	outportw(IO_DISPLAY_CTRL, 0);
-	init_font_data();
-	memset(screen, 0, 32 * 20 * 2);
+	init_font_data(2048);
+	draw_ui_clear_screen();
 	draw_ieep_ui_static();
 	draw_ieep_data();
 	wait_for_vbl();
@@ -139,9 +154,41 @@ static const char __far msg_base64_qrcode[] = "Base64 -> QR code...";
 static const char __far msg_qrcode0_ready[] = "1/1: (B) Exit";
 static const char __far msg_qrcode1_ready[] = " X/N: (X4/X2) Move (B) Exit ";
 static const char __far msg_backup_restore[] = "Slot X, Backup/Restore/Exit?";
+static const char __far menu_qr_code_export[] = "QR Code Export";
+static const char __far menu_sram_backup_restore[] = "SRAM Backup/Restore";
+static const char __far menu_exit[] = "Exit";
+
+static void draw_ui_box(uint8_t x1, uint8_t y1, uint8_t width, uint8_t height) {
+	uint8_t x2 = x1 + width - 1;
+	uint8_t y2 = y1 + height - 1;
+
+	for (uint8_t i = x1+1; i < x2; i++) {
+		screen[(y1 << 5) | i] = 205;
+		screen[(y2 << 5) | i] = 205;
+	}
+	for (uint8_t i = y1+1; i < y2; i++) {
+		screen[(i << 5) | x1] = 186;
+		screen[(i << 5) | x2] = 186;
+	}
+	screen[(y1 << 5) | x1] = 201;
+	screen[(y1 << 5) | x2] = 187;
+	screen[(y2 << 5) | x1] = 200;
+	screen[(y2 << 5) | x2] = 188;
+}
 
 static void draw_ui_clear_status(void) {
 	memset(screen + (32 * 17), 0, 28 * 2);
+}
+
+static void draw_ui_menu_entry(const char __far *text, uint8_t y, uint8_t width, uint16_t mod) {
+	uint8_t w_ofs = (28 - width) >> 1;
+	uint8_t s_len = strlen(text);
+	uint8_t s_ofs = w_ofs + ((width - s_len) >> 1);
+
+	memset(screen + (32 * y) + w_ofs, 0, width * 2);
+	for (uint8_t i = 0; i < s_len; i++) {
+		screen[(y << 5) | (s_ofs + i)] = text[i] | mod;
+	}
 }
 
 static void draw_ui_status(const char __far *text) {
@@ -169,27 +216,37 @@ static void calc_ieep_sha1(uint8_t *eeprom_data, char *digest_text) {
 
 void show_ieep_qrcode(void) {
 	uint8_t qrcode[qrcodegen_BUFFER_LEN_FOR_VERSION(27)];
-	uint8_t eeprom_data[0x800];
+	uint16_t *eeprom_data;
 	uint8_t eeprom_bank = 0;
 	char sha1_digest[40];
+
+	if (system_color_active()) {
+		eeprom_data = (uint16_t*) 0xC000;
+	} else {
+		eeprom_data = (uint16_t*) 0x3F00;
+	}
 
 	wait_for_vbl();
 	outportw(IO_DISPLAY_CTRL, 0);
 
-	memset(screen, 0, (32 * 2) * 16 + (28 * 2));
+	draw_ui_clear_screen();
 	uint16_t i = 128;
 	for (uint8_t iy = 0; iy < 16; iy++) {
 		for (uint8_t ix = 0; ix < 16; ix++) {
 			screen[((iy + 1) << 5) | (ix + 11)] = i++;
 		}
 	}
-	init_font_data();
+	init_font_data(1024);
 	memset(MEM_TILE(128), 0, 256 * 16);
 	draw_ui_status(msg_loading_data);
+	vblank_show_progress_anim = true;
 	wait_for_vbl();
 	outportw(IO_DISPLAY_CTRL,DISPLAY_SCR1_ENABLE);
 
-	ieep_read_data(0x0, eeprom_data, ieep_max_size);
+	// ieep_read_data(0x0, eeprom_data, ieep_max_size);
+	for (uint16_t i = 0; i < ieep_max_size; i += 2) {
+		eeprom_data[i >> 1] = ieep_read_word(i);
+	}
 
 	draw_ui_status(msg_ieep_sha1);
 	calc_ieep_sha1(eeprom_data, sha1_digest);
@@ -217,10 +274,11 @@ void show_ieep_qrcode(void) {
 		}
 
 		draw_ui_status(msg_ieep_base64);
-		uint16_t slen = base64_encode(qrcode_dataAndTemp, 1400, eeprom_data + b_offset, b_length);
+		uint16_t slen = base64_encode(qrcode_dataAndTemp, 0x1000, eeprom_data + b_offset, b_length);
 		draw_ui_status(msg_base64_qrcode);
 		qrcodegen_encodeBinary(qrcode_dataAndTemp, slen, qrcode,
 			qrcodegen_Ecc_LOW, 3, qr_max_version, qrcodegen_Mask_AUTO, true);
+		vblank_show_progress_anim = false;
 		if (system_color_active()) {
 			draw_ui_status(msg_qrcode1_ready);
 			screen[(17 << 5) | 1] = hex2chr[eeprom_bank + 1];
@@ -303,6 +361,7 @@ void show_ieep_qrcode(void) {
 		}
 
 		memset(MEM_TILE(128), 0, 256 * 16);
+		vblank_show_progress_anim = true;
 	}
 }
 
@@ -389,11 +448,46 @@ void show_ieep_backup_restore(void) {
 	}
 }
 
+static void show_ieep_menu(void) {
+	uint8_t oper_mode = 0;
+	uint8_t entry_width = 20;
+	uint8_t entry_count = 3;
+	uint8_t menu_x = (28 - entry_width) >> 1;
+	uint8_t menu_y = (18 - entry_count) >> 1;
+
+	draw_ui_box(menu_x - 1, menu_y - 1, entry_width + 2, entry_count + 2);
+	while (1) {
+		wait_for_vbl();
+		uint16_t keyr = keypad_r_scan();
+		draw_ui_menu_entry(menu_qr_code_export, menu_y, entry_width, oper_mode == 0 ? 0x200 : 0);
+		draw_ui_menu_entry(menu_sram_backup_restore, menu_y + 1, entry_width, oper_mode == 1 ? 0x200 : 0);
+		draw_ui_menu_entry(menu_exit, menu_y + 2, entry_width, oper_mode == 2 ? 0x200 : 0);
+		if (keyr & KEY_X1) oper_mode = (oper_mode == 0) ? 2 : (oper_mode - 1);
+		if (keyr & KEY_X3) oper_mode = (oper_mode == 2) ? 0 : (oper_mode + 1);
+		if (keyr & KEY_B) {
+			return;
+		}
+		if (keyr & KEY_A) {
+			break;
+		}
+	}
+	if (oper_mode == 0) {
+		show_ieep_qrcode();
+	} else if (oper_mode == 1) {
+		draw_ui_clear_screen();
+		draw_ieep_ui_static();
+		draw_ieep_data();
+		show_ieep_backup_restore();
+	}
+
+}
+
 void main() {
 	system_set_mode(MODE_COLOR);
 	video_shade_lut_set(GRAY_LUT_DEFAULT);
 	outportw(IO_SCR_PAL_0, 0x7520);
 	outportw(IO_SCR_PAL_1, 0x0257);
+	outportw(IO_SCR_PAL_2, 0x3210);
 	if (system_color_active()) {
 		MEM_COLOR_PALETTE(0)[0] = 0x0FFF;
 		MEM_COLOR_PALETTE(0)[1] = 0x0AAA;
@@ -404,6 +498,11 @@ void main() {
 		MEM_COLOR_PALETTE(1)[2] = 0x0AAA;
 		MEM_COLOR_PALETTE(1)[1] = 0x0555;
 		MEM_COLOR_PALETTE(1)[0] = 0x0000;
+
+		MEM_COLOR_PALETTE(2)[0] = 0x0FFF;
+		MEM_COLOR_PALETTE(2)[1] = 0x0ECD;
+		MEM_COLOR_PALETTE(2)[2] = 0x0D8B;
+		MEM_COLOR_PALETTE(2)[3] = 0x0C49;
 		ieep_max_size = IEEP_SIZE_WSC;
 	} else {
 		ieep_max_size = IEEP_SIZE_WS;
@@ -456,13 +555,8 @@ void main() {
 			show_ieep_write(ieep_pos, ieep_read_byte(ieep_pos));
 			draw_ieep_ui();
 		}
-
-		if (keyr & KEY_Y4) {
-			show_ieep_qrcode();
-			draw_ieep_ui();
-		}
-		if (keyr & KEY_Y2) {
-			show_ieep_backup_restore();
+		if (keyr & KEY_START) {
+			show_ieep_menu();
 			draw_ieep_ui();
 		}
 	}
