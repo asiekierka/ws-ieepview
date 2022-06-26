@@ -66,6 +66,8 @@ void draw_ieep_ui_static(void) {
 	screen[(17 << 5) | 9] = '0';
 	screen[(17 << 5) | 10] = '.';
 	screen[(17 << 5) | 11] = '3';
+	screen[(17 << 5) | 12] = '.';
+	screen[(17 << 5) | 13] = '1';
 }
 
 void draw_ieep_data(void) {
@@ -216,7 +218,7 @@ static void calc_ieep_sha1(uint8_t *eeprom_data, char *digest_text) {
 
 void show_ieep_qrcode(void) {
 	uint8_t qrcode[qrcodegen_BUFFER_LEN_FOR_VERSION(27)];
-	uint16_t *eeprom_data;
+	uint8_t *eeprom_data;
 	uint8_t eeprom_bank = 0;
 	char sha1_digest[40];
 
@@ -245,7 +247,7 @@ void show_ieep_qrcode(void) {
 
 	// ieep_read_data(0x0, eeprom_data, ieep_max_size);
 	for (uint16_t i = 0; i < ieep_max_size; i += 2) {
-		eeprom_data[i >> 1] = ieep_read_word(i);
+		((uint16_t*) eeprom_data)[i >> 1] = ieep_read_word(i);
 	}
 
 	draw_ui_status(msg_ieep_sha1);
@@ -450,7 +452,7 @@ void show_ieep_backup_restore(void) {
 
 static void show_ieep_menu(void) {
 	uint8_t oper_mode = 0;
-	uint8_t entry_width = 20;
+	uint8_t entry_width = 21;
 	uint8_t entry_count = 3;
 	uint8_t menu_x = (28 - entry_width) >> 1;
 	uint8_t menu_y = (18 - entry_count) >> 1;
