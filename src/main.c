@@ -71,6 +71,7 @@ void draw_ieep_ui_static(void) {
 }
 
 void draw_ieep_data(void) {
+	ws_eeprom_handle_t ieep = ws_eeprom_handle_internal();
 	int16_t ieep_pos_local = ieep_pos - 0x40;
 	if (ieep_pos_local < 0) {
 		ieep_pos_local = 0;
@@ -85,10 +86,10 @@ void draw_ieep_data(void) {
 		screen[(i << 5) | 1] = hex2chr[(addr >> 4) & 0xF];
 		screen[(i << 5) | 2] = hex2chr[(addr >> 0) & 0xF];
 
-		uint16_t w1 = ws_ieep_read_word(addr);
-		uint16_t w2 = ws_ieep_read_word(addr+2);
-		uint16_t w3 = ws_ieep_read_word(addr+4);
-		uint16_t w4 = ws_ieep_read_word(addr+6);
+		uint16_t w1 = ws_eeprom_read_word(ieep, addr);
+		uint16_t w2 = ws_eeprom_read_word(ieep, addr+2);
+		uint16_t w3 = ws_eeprom_read_word(ieep, addr+4);
+		uint16_t w4 = ws_eeprom_read_word(ieep, addr+6);
 		uint16_t b0 = (ieep_pos == (addr)) ? 0x200 : 0;
 		uint16_t b1 = (ieep_pos == (addr+1)) ? 0x200 : 0;
 		uint16_t b2 = (ieep_pos == (addr+2)) ? 0x200 : 0;
@@ -221,6 +222,7 @@ void show_ieep_qrcode(void) {
 	uint8_t *eeprom_data;
 	uint8_t eeprom_bank = 0;
 	char sha1_digest[40];
+	ws_eeprom_handle_t ieep = ws_eeprom_handle_internal();
 
 	if (ws_system_color_active()) {
 		eeprom_data = (uint16_t*) 0xC000;
@@ -247,7 +249,7 @@ void show_ieep_qrcode(void) {
 
 	// ws_ieep_read_data(0x0, eeprom_data, ieep_max_size);
 	for (uint16_t i = 0; i < ieep_max_size; i += 2) {
-		((uint16_t*) eeprom_data)[i >> 1] = ws_ieep_read_word(i);
+		((uint16_t*) eeprom_data)[i >> 1] = ws_eeprom_read_word(ieep, i);
 	}
 
 	draw_ui_status(msg_ieep_sha1);
@@ -368,6 +370,8 @@ void show_ieep_qrcode(void) {
 }
 
 void show_ieep_write(uint16_t address, uint8_t value) {
+	ws_eeprom_handle_t ieep = ws_eeprom_handle_internal();
+
 	wait_for_vbl();
 
 	draw_ui_clear_status();
@@ -383,13 +387,13 @@ void show_ieep_write(uint16_t address, uint8_t value) {
 
 		uint16_t keyr = keypad_r_scan();
 		if (keyr & KEY_A) {
-			uint16_t word = ws_ieep_read_word(address & (~0x1));
+			uint16_t word = ws_eeprom_read_word(ieep, address & (~0x1));
 			if (address & 1) {
 				word = (word & 0xFF) | (value << 8);
 			} else {
 				word = (word & 0xFF00) | value;
 			}
-			ws_ieep_write_word(address & (~0x1), word);
+			ws_eeprom_write_word(ieep, address & (~0x1), word);
 			return;
 		}
 		if (keyr & KEY_B) {
@@ -434,18 +438,22 @@ void show_ieep_backup_restore(void) {
 	}
 	uint16_t slot_seg = 0x1000 + (slot_id * 0x800);
 	if (oper_mode == 0) {
+		ws_eeprom_handle_t ieep = ws_eeprom_handle_internal();
+
 		// backup
 		for (uint16_t i = 0; i < ieep_max_size; i += 2) {
-			uint16_t w = ws_ieep_read_word(i);
+			uint16_t w = ws_eeprom_read_word(ieep, i);
 			*((uint8_t __far*) MK_FP(slot_seg, i)) = w & 0xFF;
 			*((uint8_t __far*) MK_FP(slot_seg, i + 1)) = w >> 8;
 		}
 	} else if (oper_mode == 1) {
+		ws_eeprom_handle_t ieep = ws_eeprom_handle_internal();
+
 		// restore
 		for (uint16_t i = 0; i < ieep_max_size; i += 2) {
 			uint16_t w = *((uint8_t __far*) MK_FP(slot_seg, i));
 			w |= *((uint8_t __far*) MK_FP(slot_seg, i + 1)) << 8;
-			ws_ieep_write_word(i, w);
+			ws_eeprom_write_word(ieep, i, w);
 		}
 	}
 }
@@ -554,7 +562,8 @@ void main() {
 			draw_ieep_data();
 		}
 		if (keyr & KEY_A) {
-			show_ieep_write(ieep_pos, ws_ieep_read_byte(ieep_pos));
+			ws_eeprom_handle_t ieep = ws_eeprom_handle_internal();
+			show_ieep_write(ieep_pos, ws_eeprom_read_byte(ieep, ieep_pos));
 			draw_ieep_ui();
 		}
 		if (keyr & KEY_START) {
