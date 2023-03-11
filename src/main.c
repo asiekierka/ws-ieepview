@@ -51,7 +51,7 @@ void draw_ieep_ui_static(void) {
 		screen[(16 << 5) | i] = 0xCD;
 	}
 	screen[(16 << 5) | 3] = 0xCF;
-	memset(screen + (32 * 17), 0, 28 * 2);
+	_nmemset(screen + (32 * 17), 0, 28 * 2);
 	if (ws_system_color_active()) {
 		screen[(17 << 5) | 27] = 'C' | 0x400;
 	}
@@ -67,7 +67,7 @@ void draw_ieep_ui_static(void) {
 	screen[(17 << 5) | 10] = '.';
 	screen[(17 << 5) | 11] = '3';
 	screen[(17 << 5) | 12] = '.';
-	screen[(17 << 5) | 13] = '1';
+	screen[(17 << 5) | 13] = '2';
 }
 
 void draw_ieep_data(void) {
@@ -136,7 +136,7 @@ void init_font_data(uint16_t len) {
 }
 
 static void draw_ui_clear_screen(void) {
-	memset(screen, 0, 28 * 2 + 32 * 17 * 2);
+	_nmemset(screen, 0, 28 * 2 + 32 * 17 * 2);
 }
 
 void draw_ieep_ui(void) {
@@ -180,7 +180,7 @@ static void draw_ui_box(uint8_t x1, uint8_t y1, uint8_t width, uint8_t height) {
 }
 
 static void draw_ui_clear_status(void) {
-	memset(screen + (32 * 17), 0, 28 * 2);
+	_nmemset(screen + (32 * 17), 0, 28 * 2);
 }
 
 static void draw_ui_menu_entry(const char __far *text, uint8_t y, uint8_t width, uint16_t mod) {
@@ -188,7 +188,7 @@ static void draw_ui_menu_entry(const char __far *text, uint8_t y, uint8_t width,
 	uint8_t s_len = strlen(text);
 	uint8_t s_ofs = w_ofs + ((width - s_len) >> 1);
 
-	memset(screen + (32 * y) + w_ofs, 0, width * 2);
+	_nmemset(screen + (32 * y) + w_ofs, 0, width * 2);
 	for (uint8_t i = 0; i < s_len; i++) {
 		screen[(y << 5) | (s_ofs + i)] = text[i] | mod;
 	}
@@ -241,7 +241,7 @@ void show_ieep_qrcode(void) {
 		}
 	}
 	init_font_data(1024);
-	memset(MEM_TILE(128), 0, 256 * 16);
+	_nmemset(MEM_TILE(128), 0, 256 * 16);
 	draw_ui_status(msg_loading_data);
 	vblank_show_progress_anim = true;
 	wait_for_vbl();
@@ -364,7 +364,7 @@ void show_ieep_qrcode(void) {
 			}
 		}
 
-		memset(MEM_TILE(128), 0, 256 * 16);
+		_nmemset(MEM_TILE(128), 0, 256 * 16);
 		vblank_show_progress_anim = true;
 	}
 }

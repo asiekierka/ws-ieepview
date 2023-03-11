@@ -121,7 +121,7 @@ SHA1_Transform(uint32_t state[5], const uint8_t buffer[64])
     static uint8_t workspace[64];
 
     block = (CHAR64LONG16 *) workspace;
-    memcpy(block, buffer, 64);
+    _nmemcpy(block, buffer, 64);
 #else
     block = (CHAR64LONG16 *) buffer;
 #endif
@@ -190,7 +190,7 @@ SHA1_Update(SHA1_CTX *context, const uint8_t *data, const size_t len)
         context->count[1]++;
     context->count[1] += (len >> 29);
     if ((j + len) > 63) {
-        memcpy(&context->buffer[j], data, (i = 64 - j));
+        _nmemcpy(&context->buffer[j], data, (i = 64 - j));
         SHA1_Transform(context->state, context->buffer);
         for (; i + 63 < len; i += 64) {
             SHA1_Transform(context->state, data + i);
@@ -198,7 +198,7 @@ SHA1_Update(SHA1_CTX *context, const uint8_t *data, const size_t len)
         j = 0;
     } else
         i = 0;
-    memcpy(&context->buffer[j], &data[i], len - i);
+    _nmemcpy(&context->buffer[j], &data[i], len - i);
 }
 
 /* Add padding and return the message digest. */
@@ -224,10 +224,10 @@ SHA1_Final(SHA1_CTX *context, uint8_t digest[SHA1_DIGEST_SIZE])
 
     /* Wipe variables */
     i = 0;
-    memset(context->buffer, 0, 64);
-    memset(context->state, 0, 20);
-    memset(context->count, 0, 8);
-    memset(finalcount, 0, 8);   /* SWR */
+    _nmemset(context->buffer, 0, 64);
+    _nmemset(context->state, 0, 20);
+    _nmemset(context->count, 0, 8);
+    _nmemset(finalcount, 0, 8);   /* SWR */
 
 #ifdef SHA1HANDSOFF             /* make SHA1Transform overwrite its own static vars */
     SHA1_Transform(context->state, context->buffer);
