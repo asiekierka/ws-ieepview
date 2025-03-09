@@ -73,7 +73,7 @@ void draw_ieep_ui_static(void) {
 	screen[(17 << 5) | 10] = '.';
 	screen[(17 << 5) | 11] = '3';
 	screen[(17 << 5) | 12] = '.';
-	screen[(17 << 5) | 13] = '2';
+	screen[(17 << 5) | 13] = '3';
 }
 
 void draw_ieep_data(void) {
