@@ -1,15 +1,21 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
-#include <lzsa.h>
 #include <wonderful.h>
-#include "fs.h"
+#include <ws.h>
+#include "8x8_bin.h"
 #include "base64.h"
 #include "qrcodegen.h"
 #include "sha1.h"
 
-#define screen ((uint16_t*) 0x3800)
-#define qrcode_dataAndTemp ((uint8_t*) 0x2800)
+__attribute__((section(".iramx_3800")))
+uint16_t screen[1024];
+
+__attribute__((section(".iramx_2800")))
+uint8_t qrcode_dataAndTemp[0x1000];
+
+__attribute__((section(".iramx_2000")))
+uint16_t tiles[128 * 8];
 
 const uint8_t __far hex2chr[16] = {
 '0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F'
@@ -28,7 +34,7 @@ uint16_t ieep_max_size;
 volatile bool vblank_show_progress_anim;
 volatile uint8_t vblank_ticks;
 
-void __attribute__((interrupt)) vblank_int_handler(void) {
+void __attribute__((interrupt)) __far vblank_int_handler(void) {
 	vblank_ticks++;
 	if (vblank_show_progress_anim) {
 		screen[(17 << 5) | 27] = progress_anim[(vblank_ticks >> 2) & 3] | 0x400;
@@ -129,9 +135,8 @@ static uint16_t keypad_r_scan() {
 }
 
 void init_font_data(uint16_t len) {
-	const uint8_t __far *font_data = wf_asset_map(ASSET_8X8_CHR);
 	for (uint16_t i = 0; i < len; i++) {
-		((uint16_t*) 0x2000)[i] = font_data[i] * 0x101;
+		tiles[i] = _8x8[i] * 0x101;
 	}
 }
 

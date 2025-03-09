@@ -1,0 +1,9 @@
+{
+    "clangd.arguments": [
+        "--query-driver=/opt/wonderful/toolchain/gcc-ia16-elf/bin/ia16-elf-gcc"
+    ],
+    "Lua.misc.executablePath": "/opt/wonderful/bin/wf-lua",
+    "Lua.workspace.library": [
+        "/opt/wonderful/lib/lua/5.4"
+    ]
+}
